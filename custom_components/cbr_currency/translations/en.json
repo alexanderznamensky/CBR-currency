@@ -1,0 +1,94 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "CBR Currency Rates Setup",
+        "description": "Select currencies and update interval",
+        "data": {
+          "currencies": "Tracked currencies",
+          "scan_interval": "Update interval (minutes)"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single configuration of this integration is allowed"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "CBR Currency Rates Settings",
+        "description": "Update tracking parameters",
+        "data": {
+          "currencies": "Tracked currencies",
+          "scan_interval": "Update interval (minutes)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "currency": {
+      "USD": "US Dollar",
+      "EUR": "Euro",
+      "GBP": "British Pound",
+      "CNY": "Chinese Yuan",
+      "JPY": "Japanese Yen",
+      "CHF": "Swiss Franc"
+    },
+    "scan_interval": {
+      "5": "5 minutes",
+      "15": "15 minutes",
+      "30": "30 minutes",
+      "60": "1 hour",
+      "180": "3 hours",
+      "360": "6 hours",
+      "720": "12 hours",
+      "1440": "1 day"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cbr_exchange_rates": {
+        "name": "Exchange Rates from CBR",
+        "state_attributes": {
+          "currency": {
+            "name": "Currency",
+            "state": "Current rate"
+          },
+          "rate_tomorrow": {
+            "name": "Tomorrow's rate",
+            "state": "No data"
+          },
+          "rate_previous": {
+            "name": "Previous rate",
+            "state": "No data"
+          },
+          "change": {
+            "name": "Change",
+            "state": {
+              "up": "Up",
+              "down": "Down",
+              "same": "No change"
+            }
+          },
+          "change_amount": {
+            "name": "Difference",
+            "state": "0 rubles exactly"
+          },
+          "date": {
+            "name": "Rate date"
+          },
+          "date_previous": {
+            "name": "Previous rate date"
+          },
+          "rate_formatted": {
+            "name": "Formatted rate"
+          },
+          "change_formatted": {
+            "name": "Formatted difference"
+          }
+        }
+      }
+    }
+  }
+}
