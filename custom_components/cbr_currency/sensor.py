@@ -5,23 +5,23 @@ import logging
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 from typing import Any
-import urllib.request
+from urllib.request import urlopen
+import socket
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from homeassistant.util import Throttle
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
     ATTRIBUTION,
     BASE_URL,
-    CURRENCY_CODES,
     CONF_CURRENCIES,
+    CURRENCY_OPTIONS,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
+    CURRENCY_OPTIONS,
     DOMAIN,
 )
 
@@ -33,149 +33,214 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the CBR currency sensors from a config entry."""
-    options = config_entry.options
-    
-    scan_interval = timedelta(minutes=int(options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)))
-    currencies = options.get(CONF_CURRENCIES, ["USD", "EUR"])
+    config = config_entry.options
+    scan_interval = timedelta(seconds=config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL * 60))
+    currencies = config.get(CONF_CURRENCIES, ["USD", "EUR"])
 
+    coordinator = CBRCurrencyCoordinator(hass, scan_interval)
+    
+    # Fetch initial data
+    await coordinator.async_config_entry_first_refresh()
+    
     entities = []
     for currency in currencies:
-        if currency in CURRENCY_CODES:
-            sensor = CBRCurrencySensor(
-                currency,
-                scan_interval,
-                hass,
-            )
-            entities.append(sensor)
+        if currency in CURRENCY_OPTIONS:
+            entities.append(CBRCurrencySensor(coordinator, currency))
     
-    async_add_entities(entities, True)
+    async_add_entities(entities)
+
+class CBRCurrencyCoordinator(DataUpdateCoordinator):
+    """Class to manage fetching CBR currency data."""
+    
+    def __init__(self, hass: HomeAssistant, update_interval: timedelta):
+        """Initialize global CBR currency data updater."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_interval=update_interval,
+        )
+        self.previous_rates = None
+        self.previous_date = None
+
+    async def _async_update_data(self):
+        """Fetch data from CBR API."""
+        try:
+            # Получаем текущие данные
+            current_data = await self.hass.async_add_executor_job(self._fetch_cbr_data)
+            
+            # Получаем данные за предыдущий день
+            try:
+                prev_date = (datetime.strptime(current_data['date'], "%d.%m.%Y") - timedelta(days=1)).strftime("%d.%m.%Y")
+                prev_url = f"{BASE_URL}?date_req={prev_date}"
+                self.previous_rates = await self.hass.async_add_executor_job(self._fetch_cbr_data, prev_url)
+                self.previous_date = prev_date
+            except Exception as prev_err:
+                _LOGGER.warning(f"Could not fetch previous day rates: {prev_err}")
+                self.previous_rates = None
+                self.previous_date = None
+            
+            return current_data
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with CBR API: {err}")
+
+    def _fetch_cbr_data(self, url: str = BASE_URL):
+        """Fetch data from CBR website."""
+        try:
+            socket.setdefaulttimeout(10)
+            with urlopen(url) as response:
+                xml_data = response.read()
+                root = ET.fromstring(xml_data)
+                
+                rates = {}
+                for valute in root.findall('Valute'):
+                    char_code = valute.find('CharCode').text
+                    if char_code in CURRENCY_OPTIONS:
+                        value = float(valute.find('Value').text.replace(",", "."))
+                        nominal = int(valute.find('Nominal').text)
+                        rates[char_code] = round(value / nominal, 4)
+                
+                return {
+                    'rates': rates,
+                    'date': root.attrib['Date'],
+                    'timestamp': datetime.now().isoformat(),
+                }
+        except Exception as err:
+            raise UpdateFailed(f"Error fetching CBR data from {url}: {err}")
 
 class CBRCurrencySensor(SensorEntity):
     """Representation of a CBR currency sensor."""
 
-    _attr_has_entity_name = True
+    _attr_attribution = ATTRIBUTION
+    _attr_native_unit_of_measurement = "RUB"
     _attr_translation_key = "cbr_exchange_rates"
+    _attr_state_class = "measurement"
+    _attr_should_poll = False
 
-    def __init__(self, currency: str, scan_interval: timedelta, hass: HomeAssistant) -> None:
+    def __init__(self, coordinator: CBRCurrencyCoordinator, currency: str):
         """Initialize the sensor."""
+        self._coordinator = coordinator
         self._currency = currency
-        self._hass = hass
         self._attr_name = f"CBR {currency} Exchange Rate"
-        self._attr_icon = "mdi:currency-usd" if currency == "USD" else "mdi:currency-eur"
-        self._attr_native_unit_of_measurement = "RUB"
-        self._attr_attribution = ATTRIBUTION
         self._attr_unique_id = f"cbr_{currency.lower()}_exchange_rate"
-        self._attr_extra_state_attributes = {
-            "currency": currency,
-            "rate_previous": None,
-            "change": None,
-            "change_amount": None,
-            "date": None,
-            "date_previous": None,
+        # Устанавливаем иконку с fallback на mdi:currency-usd-off
+        icon_name = f"mdi:currency-{currency.lower()}"
+        try:
+            # Проверяем существование иконки
+            if not self._icon_exists(icon_name):
+                raise ValueError("Icon not found")
+            self._attr_icon = icon_name
+        except:
+            self._attr_icon = "mdi:currency-usd-off"
+
+    def _icon_exists(self, icon_name: str) -> bool:
+        """Check if icon exists in MDI."""
+        # Здесь можно добавить проверку существования иконки
+        # В текущей реализации просто проверяем известные валюты
+        known_icons = ["usd", "eur", "gbp", "jpy", "cny", "rub"]
+        return any(icon_name.endswith(x) for x in known_icons)
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self._coordinator.last_update_success and self._currency in self._coordinator.data.get('rates', {})
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the state of the sensor."""
+        return self._coordinator.data.get('rates', {}).get(self._currency)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        if not self.available:
+            return {} 
+
+        attrs = {
+            "currency": self._currency,
+            "date": self._coordinator.data.get('date'),
+            "last_updated": self._coordinator.data.get('timestamp'),
+            "rate_formatted": self._format_currency(self.native_value),
         }
         
-        # Set up throttling
-        self.update = Throttle(scan_interval)(self._update)
+        current_rate = self.native_value
+        current_date = self._coordinator.data.get('date')
+        previous_rate = self._coordinator.previous_rates.get('rates', {}).get(self._currency) if self._coordinator.previous_rates else None
+        previous_date = self._coordinator.previous_date
         
-        # Schedule initial update
-        hass.async_create_task(self.async_update())
-
-    async def async_update(self) -> None:
-        """Update the sensor data."""
-        await self._hass.async_add_executor_job(self._update)
-
-    def _update(self) -> None:
-        """Get the latest data and updates the states."""
-        _LOGGER.debug(f"Updating CBR currency data for {self._currency}")
-        try:
-            # Get current rates using urllib (synchronous)
-            with urllib.request.urlopen(BASE_URL, timeout=10) as response:
-                xml_data = response.read()
-                current_root = ET.fromstring(xml_data)
-                current_date = current_root.attrib['Date']
-                
-                # Get previous day rates
-                prev_date = (datetime.strptime(current_date, "%d.%m.%Y") - timedelta(days=1)).strftime("%d.%m.%Y")
-                prev_url = f"{BASE_URL}?date_req={prev_date}"
-                with urllib.request.urlopen(prev_url, timeout=10) as prev_response:
-                    prev_xml = prev_response.read()
-                    prev_root = ET.fromstring(prev_xml)
-            
-            # Parse values
-            current_rate = self._parse_rate(current_root)
-            previous_rate = self._parse_rate(prev_root)
-            
-            # Calculate changes
-            change_amount = current_rate - previous_rate
-            change = "up" if change_amount > 0 else "down" if change_amount < 0 else "same"
+        # Calculate changes
+        change = None
+        change_amount = None
+        if current_rate is not None and previous_rate is not None:
+            change_amount = round(current_rate - previous_rate, 4)
+            if change_amount > 0:
+                change = "up"
+            elif change_amount < 0:
+                change = "down"
+            else:
+                change = "same"
             change_amount = abs(change_amount)
-            
-            # Update attributes
-            self._attr_native_value = current_rate
-            self._attr_extra_state_attributes.update({
-                "rate_previous": previous_rate,
-                "change": change,
-                "change_amount": change_amount,
-                "date": current_date,
-                "date_previous": prev_date,
-                "rate_formatted": self._format_currency(current_rate),
-                "change_formatted": self._format_currency(change_amount),
-            })
-            
-            _LOGGER.debug(f"Successfully updated CBR currency data for {self._currency}")
-            
-        except Exception as ex:
-            _LOGGER.error(f"Error updating CBR currency data: {str(ex)}")
-            self._attr_native_value = None
-            self._attr_extra_state_attributes.update({
-                "error": str(ex),
-                "rate_previous": None,
-                "change": None,
-                "change_amount": None,
-                "date": None,
-                "date_previous": None,
-            })
+        
+        attributes = {
+            "currency": self._currency,
+            "currency_name": CURRENCY_OPTIONS.get(self._currency, self._currency),
+            "rate_previous": previous_rate,
+            "rate_formatted": self._format_currency(current_rate),
+            "previous_rate_formatted": self._format_currency(previous_rate),
+            "date": current_date,
+            "date_previous": previous_date,
+            "change": change,
+            "change_amount": change_amount,
+            "change_formatted": self._format_currency(change_amount) if change_amount is not None else None,
+            "last_updated": self._coordinator.data.get('timestamp'),
+        }
+        
+        return {k: v for k, v in attributes.items() if v is not None}
 
-    def _parse_rate(self, root: ET.Element) -> float:
-        """Parse the currency rate from the XML."""
-        for valute in root.findall('Valute'):
-            if valute.find('CharCode').text == self._currency:
-                value = valute.find('Value').text.replace(",", ".")
-                return round(float(value), 4)
-        return 0.0
+
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._coordinator.async_add_listener(
+                self.async_write_ha_state
+            )
+        )
 
     def _format_currency(self, num: float | None) -> str:
         """Format currency value as string with rubles and kopecks."""
         if num is None or num <= 0:
             return "0 рублей ровно"
         
-        rur = int(num)
-        penny = int(round((num - rur) * 100, 0))
+        rubles = int(num)
+        kopecks = int(round((num - rubles) * 100, 0))
         
-        if penny >= 100:
-            penny = 0
-            rur += 1
+        if kopecks >= 100:
+            kopecks = 0
+            rubles += 1
         
-        if penny == 0:
-            return f"{rur} {self._rub(rur)} ровно"
-        return f"{rur} {self._rub(rur)} {penny} {self._kop(penny)}"
+        if kopecks == 0:
+            return f"{rubles} {self._rub(rubles)} ровно"
+        return f"{rubles} {self._rub(rubles)} {kopecks} {self._kop(kopecks)}"
 
     def _rub(self, num: int) -> str:
         """Return correct russian word for rubles."""
-        reminder = num % 100 if num >= 100 else num % 10
-        if num == 0 or reminder == 0 or reminder >= 5 or num in range(11, 19):
+        if num % 100 in range(11, 20):
             return "рублей"
-        elif reminder == 1:
+        last_digit = num % 10
+        if last_digit == 1:
             return "рубль"
-        return "рубля"
+        if last_digit in (2, 3, 4):
+            return "рубля"
+        return "рублей"
 
     def _kop(self, num: int) -> str:
         """Return correct russian word for kopecks."""
-        reminder = num % 10
-        if num <= 0:
-            return "ровно"
-        elif reminder == 0 or reminder >= 5 or num in range(11, 19):
+        if num % 100 in range(11, 20):
             return "копеек"
-        elif reminder == 1:
+        last_digit = num % 10
+        if last_digit == 1:
             return "копейка"
-        return "копейки"
+        if last_digit in (2, 3, 4):
+            return "копейки"
+        return "копеек"

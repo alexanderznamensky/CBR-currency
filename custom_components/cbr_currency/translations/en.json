@@ -26,26 +26,6 @@
       }
     }
   },
-  "selector": {
-    "currency": {
-      "USD": "US Dollar",
-      "EUR": "Euro",
-      "GBP": "British Pound",
-      "CNY": "Chinese Yuan",
-      "JPY": "Japanese Yen",
-      "CHF": "Swiss Franc"
-    },
-    "scan_interval": {
-      "5": "5 minutes",
-      "15": "15 minutes",
-      "30": "30 minutes",
-      "60": "1 hour",
-      "180": "3 hours",
-      "360": "6 hours",
-      "720": "12 hours",
-      "1440": "1 day"
-    }
-  },
   "entity": {
     "sensor": {
       "cbr_exchange_rates": {
@@ -55,8 +35,12 @@
             "name": "Currency",
             "state": "Current rate"
           },
-          "rate_tomorrow": {
-            "name": "Tomorrow's rate",
+          "currency_name": {
+            "name": "Currency name",
+            "state": "Нет данных"
+          },
+          "previous_rate_formatted": {
+            "name": "Previous formatted rate",
             "state": "No data"
           },
           "rate_previous": {
@@ -80,6 +64,9 @@
           },
           "date_previous": {
             "name": "Previous rate date"
+          },
+          "last_updated": {
+            "name": "Last updated"
           },
           "rate_formatted": {
             "name": "Formatted rate"
