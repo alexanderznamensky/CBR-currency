@@ -21,4 +21,4 @@ If the integration is not in the list, you need to clear the browser cache.
 
 ## About
 
-Home Assistant displays exchange rates for USD and EURO. TODO: add all avalable currencies
+Home Assistant displays all avalable exchange rates for all currencies provided by CBRF.
