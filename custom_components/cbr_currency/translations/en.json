@@ -43,6 +43,10 @@
             "name": "Previous formatted rate",
             "state": "No data"
           },
+          "rate": {
+            "name": "Current rate",
+            "state": "No data"
+          },
           "rate_previous": {
             "name": "Previous rate",
             "state": "No data"
@@ -62,8 +66,14 @@
           "date": {
             "name": "Rate date"
           },
+          "current_date": {
+            "name": "Current date"
+          },
           "date_previous": {
             "name": "Previous rate date"
+          },
+          "update_interval_minutes": {
+            "name": "Update interval, min."
           },
           "last_updated": {
             "name": "Last updated"

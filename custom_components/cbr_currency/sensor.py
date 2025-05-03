@@ -45,7 +45,7 @@ async def async_setup_entry(
     entities = []
     for currency in currencies:
         if currency in CURRENCY_OPTIONS:
-            entities.append(CBRCurrencySensor(coordinator, currency))
+            entities.append(CBRCurrencySensor(coordinator, currency, scan_interval))
     
     async_add_entities(entities)
 
@@ -98,12 +98,13 @@ class CBRCurrencyCoordinator(DataUpdateCoordinator):
                     if char_code in CURRENCY_OPTIONS:
                         value = float(valute.find('Value').text.replace(",", "."))
                         nominal = int(valute.find('Nominal').text)
-                        rates[char_code] = round(value / nominal, 4)
+                        rates[char_code] = round(value / nominal, 4) 
                 
                 return {
                     'rates': rates,
                     'date': root.attrib['Date'],
                     'timestamp': datetime.now().isoformat(),
+                    'current_date': datetime.now().strftime("%d.%m.%Y"), 
                 }
         except Exception as err:
             raise UpdateFailed(f"Error fetching CBR data from {url}: {err}")
@@ -117,10 +118,11 @@ class CBRCurrencySensor(SensorEntity):
     _attr_state_class = "measurement"
     _attr_should_poll = False
 
-    def __init__(self, coordinator: CBRCurrencyCoordinator, currency: str):
+    def __init__(self, coordinator: CBRCurrencyCoordinator, currency: str, scan_interval: timedelta):
         """Initialize the sensor."""
         self._coordinator = coordinator
         self._currency = currency
+        self._scan_interval_minutes = scan_interval.total_seconds() / 60 
         self._attr_name = f"CBR {currency} Exchange Rate"
         self._attr_unique_id = f"cbr_{currency.lower()}_exchange_rate"
         # Устанавливаем иконку с fallback на mdi:currency-usd-off
@@ -148,7 +150,8 @@ class CBRCurrencySensor(SensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
-        return self._coordinator.data.get('rates', {}).get(self._currency)
+        rate = self._coordinator.data.get('rates', {}).get(self._currency)
+        return round(rate, 4) if rate is not None else None 
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -156,13 +159,6 @@ class CBRCurrencySensor(SensorEntity):
         if not self.available:
             return {} 
 
-        attrs = {
-            "currency": self._currency,
-            "date": self._coordinator.data.get('date'),
-            "last_updated": self._coordinator.data.get('timestamp'),
-            "rate_formatted": self._format_currency(self.native_value),
-        }
-        
         current_rate = self.native_value
         current_date = self._coordinator.data.get('date')
         previous_rate = self._coordinator.previous_rates.get('rates', {}).get(self._currency) if self._coordinator.previous_rates else None
@@ -172,7 +168,7 @@ class CBRCurrencySensor(SensorEntity):
         change = None
         change_amount = None
         if current_rate is not None and previous_rate is not None:
-            change_amount = round(current_rate - previous_rate, 4)
+            change_amount = round(current_rate - previous_rate, 4) 
             if change_amount > 0:
                 change = "up"
             elif change_amount < 0:
@@ -184,11 +180,14 @@ class CBRCurrencySensor(SensorEntity):
         attributes = {
             "currency": self._currency,
             "currency_name": CURRENCY_OPTIONS.get(self._currency, self._currency),
+            "rate": current_rate,
             "rate_previous": previous_rate,
             "rate_formatted": self._format_currency(current_rate),
             "previous_rate_formatted": self._format_currency(previous_rate),
+            "current_date": self._coordinator.data.get('current_date'),
             "date": current_date,
             "date_previous": previous_date,
+            "update_interval_minutes": round(self._scan_interval_minutes, 2), 
             "change": change,
             "change_amount": change_amount,
             "change_formatted": self._format_currency(change_amount) if change_amount is not None else None,
@@ -196,7 +195,6 @@ class CBRCurrencySensor(SensorEntity):
         }
         
         return {k: v for k, v in attributes.items() if v is not None}
-
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
