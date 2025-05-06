@@ -238,7 +238,7 @@ class CBRCurrencySensor(SensorEntity):
             return "копеек"
         last_digit = num % 10
         if last_digit == 1:
-            return "копейка"
+            return "копейку"
         if last_digit in (2, 3, 4):
             return "копейки"
         return "копеек"
