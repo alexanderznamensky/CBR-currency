@@ -67,7 +67,7 @@
             "name": "Rate date"
           },
           "current_date": {
-            "name": "Current date"
+            "name": "Today"
           },
           "date_previous": {
             "name": "Previous rate date"
