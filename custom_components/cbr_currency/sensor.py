@@ -62,13 +62,23 @@ class CBRCurrencyCoordinator(DataUpdateCoordinator):
         )
         self.previous_rates = None
         self.previous_date = None
+        self.new_rate_timestamp = None       # <--- Добавлено!
+        self.last_known_course_date = None   # <--- Добавлено!
 
     async def _async_update_data(self):
         """Fetch data from CBR API."""
         try:
-            # Получаем текущие данные
             current_data = await self.hass.async_add_executor_job(self._fetch_cbr_data)
-            
+            current_course_date = current_data['date']  # дата курса из XML
+
+            # === Запоминание момента появления нового курса ===
+            if self.last_known_course_date != current_course_date:
+                self.new_rate_timestamp = datetime.now().isoformat()
+                self.last_known_course_date = current_course_date
+
+            # Передаём этот timestamp дальше
+            current_data['new_rate_timestamp'] = self.new_rate_timestamp
+
             # Получаем данные за предыдущий день
             try:
                 prev_date = (datetime.strptime(current_data['date'], "%d.%m.%Y") - timedelta(days=1)).strftime("%d.%m.%Y")
@@ -79,7 +89,7 @@ class CBRCurrencyCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning(f"Could not fetch previous day rates: {prev_err}")
                 self.previous_rates = None
                 self.previous_date = None
-            
+
             return current_data
         except Exception as err:
             raise UpdateFailed(f"Error communicating with CBR API: {err}")
@@ -192,6 +202,7 @@ class CBRCurrencySensor(SensorEntity):
             "change_amount": change_amount,
             "change_formatted": self._format_currency(change_amount) if change_amount is not None else None,
             "last_updated": self._coordinator.data.get('timestamp'),
+            "new_rate_timestamp": self._coordinator.data.get('new_rate_timestamp'),  # <--- Добавлено!
         }
         
         return {k: v for k, v in attributes.items() if v is not None}

@@ -39,10 +39,6 @@
             "name": "Название валюты",
             "state": "Нет данных"
           },
-          "previous_rate_formatted": {
-            "name": "Предыдущий форматированный курс",
-            "state": "Нет данных"
-          },
           "rate": {
             "name": "Текущий курс",
             "state": "Нет данных"
@@ -50,6 +46,25 @@
           "rate_previous": {
             "name": "Предыдущий курс",
             "state": "Нет данных"
+          },
+          "rate_formatted": {
+            "name": "Форматированный курс"
+          },
+          "previous_rate_formatted": {
+            "name": "Предыдущий форматированный курс",
+            "state": "Нет данных"
+          },
+          "current_date": {
+            "name": "Текущая дата"
+          },
+          "date": {
+            "name": "Дата текущего курса"
+          },
+          "date_previous": {
+            "name": "Дата предыдущего курса"
+          },
+          "update_interval_minutes": {
+            "name": "Интервал обновления, мин."
           },
           "change": {
             "name": "Изменение",
@@ -63,26 +78,14 @@
             "name": "Разница",
             "state": "0 рублей ровно"
           },
-          "date": {
-            "name": "Дата текущего курса"
-          },
-          "current_date": {
-            "name": "Сегодня"
-          },
-          "date_previous": {
-            "name": "Дата предыдущего курса"
-          },
-          "update_interval_minutes": {
-            "name": "Интервал обновления, мин."
-          },
           "last_updated": {
             "name": "Последнее обновление"
           },
-          "rate_formatted": {
-            "name": "Форматированный курс"
-          },
           "change_formatted": {
             "name": "Форматированная разница"
+          },
+          "new_rate_timestamp": {
+            "name": "Новый обменный курс получен"
           }
         }
       }

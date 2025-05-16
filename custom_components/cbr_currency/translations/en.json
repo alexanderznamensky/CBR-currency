@@ -39,10 +39,6 @@
             "name": "Currency name",
             "state": "Нет данных"
           },
-          "previous_rate_formatted": {
-            "name": "Previous formatted rate",
-            "state": "No data"
-          },
           "rate": {
             "name": "Current rate",
             "state": "No data"
@@ -50,6 +46,25 @@
           "rate_previous": {
             "name": "Previous rate",
             "state": "No data"
+          },
+          "rate_formatted": {
+            "name": "Formatted rate"
+          },
+          "previous_rate_formatted": {
+            "name": "Previous formatted rate",
+            "state": "No data"
+          },
+          "current_date": {
+            "name": "Current date"
+          },
+          "date": {
+            "name": "Rate date"
+          },
+          "date_previous": {
+            "name": "Previous rate date"
+          },
+          "update_interval_minutes": {
+            "name": "Update interval, min."
           },
           "change": {
             "name": "Change",
@@ -63,26 +78,14 @@
             "name": "Difference",
             "state": "0 rubles exactly"
           },
-          "date": {
-            "name": "Rate date"
-          },
-          "current_date": {
-            "name": "Today"
-          },
-          "date_previous": {
-            "name": "Previous rate date"
-          },
-          "update_interval_minutes": {
-            "name": "Update interval, min."
+          "change_formatted": {
+            "name": "Formatted difference"
           },
           "last_updated": {
             "name": "Last updated"
           },
-          "rate_formatted": {
-            "name": "Formatted rate"
-          },
-          "change_formatted": {
-            "name": "Formatted difference"
+          "new_rate_timestamp": {
+            "name": "New rate received"
           }
         }
       }
