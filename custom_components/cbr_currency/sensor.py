@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.storage import Store
 
 from .const import (
     ATTRIBUTION,
@@ -27,6 +28,9 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+STORAGE_KEY = "cbr_currency_rate_storage"
+STORAGE_VERSION = 1
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -39,6 +43,9 @@ async def async_setup_entry(
 
     coordinator = CBRCurrencyCoordinator(hass, scan_interval)
     
+    # Загружаем предыдущее состояние timestamp и даты курса
+    await coordinator.async_load_last_state()
+
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
     
@@ -60,10 +67,31 @@ class CBRCurrencyCoordinator(DataUpdateCoordinator):
             name=DOMAIN,
             update_interval=update_interval,
         )
+        self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self.previous_rates = None
         self.previous_date = None
-        self.new_rate_timestamp = None       # <--- Добавлено!
-        self.last_known_course_date = None   # <--- Добавлено!
+        self.new_rate_timestamp = None
+        self.last_known_course_date = None
+
+    async def async_load_last_state(self):
+        """Load last known course date and timestamp from storage."""
+        data = await self._store.async_load()
+        if data:
+            self.last_known_course_date = data.get("last_known_course_date")
+            self.new_rate_timestamp = data.get("new_rate_timestamp")
+            _LOGGER.debug("Loaded last state from storage: %s", data)
+
+    async def async_save_state(self):
+        """Save current course date and timestamp to storage."""
+        await self._store.async_save({
+            "last_known_course_date": self.last_known_course_date,
+            "new_rate_timestamp": self.new_rate_timestamp,
+        })
+        _LOGGER.debug(
+            "Saved state to storage: last_known_course_date=%s, new_rate_timestamp=%s",
+            self.last_known_course_date,
+            self.new_rate_timestamp,
+        )
 
     async def _async_update_data(self):
         """Fetch data from CBR API."""
@@ -75,6 +103,8 @@ class CBRCurrencyCoordinator(DataUpdateCoordinator):
             if self.last_known_course_date != current_course_date:
                 self.new_rate_timestamp = datetime.now().isoformat()
                 self.last_known_course_date = current_course_date
+                # Сохраняем новое состояние
+                await self.async_save_state()
 
             # Передаём этот timestamp дальше
             current_data['new_rate_timestamp'] = self.new_rate_timestamp
@@ -147,8 +177,6 @@ class CBRCurrencySensor(SensorEntity):
 
     def _icon_exists(self, icon_name: str) -> bool:
         """Check if icon exists in MDI."""
-        # Здесь можно добавить проверку существования иконки
-        # В текущей реализации просто проверяем известные валюты
         known_icons = ["usd", "eur", "gbp", "jpy", "cny", "rub"]
         return any(icon_name.endswith(x) for x in known_icons)
 
@@ -202,7 +230,7 @@ class CBRCurrencySensor(SensorEntity):
             "change_amount": change_amount,
             "change_formatted": self._format_currency(change_amount) if change_amount is not None else None,
             "last_updated": self._coordinator.data.get('timestamp'),
-            "new_rate_timestamp": self._coordinator.data.get('new_rate_timestamp'),  # <--- Добавлено!
+            "new_rate_timestamp": self._coordinator.data.get('new_rate_timestamp'),
         }
         
         return {k: v for k, v in attributes.items() if v is not None}
